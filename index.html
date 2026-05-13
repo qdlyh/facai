@@ -556,13 +556,12 @@ async function fetchMarketList(sort, pn) {
 
 // ====== Strategy Evaluation ======
 function evaluateStock(stockData, md) {
-  if (!stockData || !stockData.data) return { score: 0, verdict: 'nodata', signals: [], risks: [] };
-  const d = stockData.data;
-  const price = d.f43;
-  const open = d.f46;
-  const changePct = d.f170;
-  const volRatio = d.f50;
-  const stock = STOCK_POOL.find(s => s.code === d.f57);
+  if (!stockData || !stockData.price) return { score: 0, verdict: 'nodata', signals: [], risks: [] };
+  const price = stockData.price;
+  const open = stockData.open;
+  const changePct = parseFloat(stockData.changePct);
+  const volume = stockData.volume || 0;
+  const stock = STOCK_POOL.find(s => s.code === stockData.code);
   const sector = stock?.sector || '其他';
 
   let score = 0;
@@ -590,9 +589,10 @@ function evaluateStock(stockData, md) {
     signals.push({ type:'miss', text:'— 未低开' });
   }
 
-  if (volRatio !== undefined && volRatio > 0 && volRatio < 0.85) {
+  const volRatio = volume > 0 ? volume / 50000 : 0;
+  if (volRatio > 0 && volRatio < 0.85) {
     score += 15; signals.push({ type:'ok', text:`✓ 缩量(量比${volRatio.toFixed(2)}) +15分` });
-  } else if (volRatio !== undefined) {
+  } else if (volume > 0) {
     signals.push({ type:'miss', text:`— 量比${volRatio.toFixed(2)}，未明显缩量` });
   }
 
@@ -603,19 +603,16 @@ function evaluateStock(stockData, md) {
   score = Math.min(score, 100);
   let verdict = score >= 60 ? 'buy' : score >= 35 ? 'watch' : 'avoid';
 
-  if (d.f51 && price && price >= d.f51 * 0.93) { risks.push('⚠ 接近涨停，追高风险大'); if (verdict === 'buy') verdict = 'watch'; }
-
-  const bp = computeBPS(d, stock?.market, stock?.code);
+  const bp = computeBPS(price);
   return { score, verdict, signals, risks, sector, bp, phase: '3-3' };
 }
 
-function computeBPS(d, market, code) {
-  if (!d || !d.f43) return { buy: '--', sell: '--', stop: '--' };
-  const p = d.f43;
+function computeBPS(price) {
+  if (!price) return { buy: '--', sell: '--', stop: '--' };
   return {
-    buy: (p * 0.97).toFixed(2),
-    sell: (p * 1.035).toFixed(2),
-    stop: (p * 0.95).toFixed(2),
+    buy: (price * 0.97).toFixed(2),
+    sell: (price * 1.035).toFixed(2),
+    stop: (price * 0.95).toFixed(2),
   };
 }
 
@@ -623,9 +620,7 @@ function screenStocks(md) {
   const results = STOCK_POOL.map(s => {
     const q = allQuotes[s.code];
     const ev = q ? evaluateStock(q, md) : { score: 0, verdict: 'nodata', signals: [], risks: [], bp: {buy:'--',sell:'--',stop:'--'} };
-    const price = q?.data?.f43;
-    const changePct = q?.data?.f170;
-    return { ...s, ...ev, price, changePct };
+    return { ...s, ...ev, price: q?.price, changePct: parseFloat(q?.changePct) };
   });
   results.sort((a, b) => b.score - a.score);
   return results.slice(0, 10);
@@ -681,14 +676,13 @@ function renderStatusBar() {
 
   date.textContent = new Date().toLocaleDateString('zh-CN');
 
-  if (marketData?.shQuote?.data) {
-    const d = marketData.shQuote.data;
-    const p = d.f43 || 0;
-    const c = d.f170 || 0;
+  if (marketData?.shQuote) {
+    const q = marketData.shQuote;
+    const p = q.price || 0;
+    const c = q.change || 0;
     idxPrice.textContent = p.toFixed(2);
     idxChange.textContent = `${c > 0 ? '+' : ''}${c.toFixed(2)}%`;
     idxChange.className = `change ${c >= 0 ? 'up' : 'down'}`;
-    const vol = d.f47 || 0;
     const isExpanding = marketData.volExpanding;
     const risks = checkRisks(marketData);
     if (risks.some(r => r.level === 'danger')) {
@@ -792,9 +786,9 @@ async function diagnose() {
   result.className = 'diagnosis-result visible';
   const vCls = ev.verdict === 'buy' ? 'buy' : ev.verdict === 'watch' ? 'watch' : 'avoid';
   const vText = ev.verdict === 'buy' ? '建议买入 ✓' : ev.verdict === 'watch' ? '观望 ⚠' : ev.verdict === 'reject' ? '不关注 ✗' : '暂无数据';
-  const price = quote?.data?.f43;
-  const change = quote?.data?.f170;
-  const changeStr = change !== undefined ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '--';
+  const price = quote?.price;
+  const change = parseFloat(quote?.changePct);
+  const changeStr = !isNaN(change) ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '--';
 
   result.innerHTML = `
     <div class="diag-verdict ${vCls}">${stock.name} (${stock.code}) — ${vText} <span style="font-size:14px;font-weight:400">${price ? price.toFixed(2) : '--'} ${changeStr}</span></div>
@@ -844,12 +838,11 @@ async function loadAllData() {
   try {
     const [indexRes] = await Promise.all([fetchIndexData()]);
     if (indexRes) {
-      const sh = indexRes.sh?.data;
-      const sz = indexRes.sz?.data;
-      marketData.shPrice = sh?.f43 || 0;
+      const sh = indexRes.sh;
+      marketData.shPrice = sh?.price || 0;
       marketData.supportLevel = [4055, 4060];
       marketData.resistanceLevel = [4250, 4300];
-      marketData.volExpanding = (sh?.f47 || 0) > 5000000;
+      marketData.volExpanding = (sh?.volume || 0) > 5000000;
       marketData.marginTotal = 3.0;
       marketData.hotSectors = ['半导体','AI','存储','航天'];
       marketData.shQuote = indexRes.sh;
@@ -860,7 +853,10 @@ async function loadAllData() {
     const quotePromises = STOCK_POOL.map(s => fetchQuote(s.code, s.market));
     const quotes = await Promise.all(quotePromises);
     quotes.forEach((q, i) => {
-      if (q?.data) allQuotes[STOCK_POOL[i].code] = q;
+      if (q && q.price) {
+        q.code = STOCK_POOL[i].code;
+        allQuotes[STOCK_POOL[i].code] = q;
+      }
     });
 
     render();

@@ -1,22 +1,36 @@
 ﻿const https = require('https');
-function proxyGet(url) {
+
+function sinaGet(code) {
   return new Promise((resolve, reject) => {
-    const opts = new URL(url);
-    opts.headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://push2.eastmoney.com/' };
-    https.get(opts, (res) => {
-      let data = ''; res.on('data', c => data += c);
-      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve(data); } });
+    https.get(`https://hq.sinajs.cn/list=${code}`, { headers: { 'Referer': 'https://finance.sina.com.cn' } }, (res) => {
+      let d = ''; res.on('data', c => d += c.toString('utf-8'));
+      res.on('end', () => {
+        const m = d.match(/"(.+)"/);
+        resolve(m ? m[1] : '');
+      });
     }).on('error', reject);
   });
 }
+
 module.exports = async (req, res) => {
   const { searchParams } = new URL(req.url, `http://${req.headers.host}`);
   const code = searchParams.get('code');
   const market = searchParams.get('market') || '1';
+  const sinaCode = market === '1' ? `sh${code}` : `sz${code}`;
   try {
-    const data = await proxyGet(`https://push2.eastmoney.com/api/qt/stock/get?secid=${market}.${code}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f57,f58,f170,f169,f15,f16,f17,f18,f100,f102&invt=2&fltt=2`);
+    const raw = await sinaGet(sinaCode);
+    const parts = raw.split(',');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.json(data);
+    res.json({
+      name: parts[0],
+      close: parseFloat(parts[1]),
+      open: parseFloat(parts[2]),
+      price: parseFloat(parts[3]),
+      high: parseFloat(parts[4]),
+      low: parseFloat(parts[5]),
+      volume: parseInt(parts[8]) / 100,
+      amount: parseFloat(parts[9]),
+      changePct: parts[2] && parts[3] ? ((parseFloat(parts[3]) - parseFloat(parts[2])) / parseFloat(parts[2]) * 100).toFixed(2) : 0
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
-

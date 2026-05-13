@@ -1,21 +1,8 @@
-﻿const https = require('https');
-function proxyGet(url) {
-  return new Promise((resolve, reject) => {
-    const opts = new URL(url);
-    opts.headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://push2.eastmoney.com/' };
-    https.get(opts, (res) => {
-      let data = ''; res.on('data', c => data += c);
-      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve(data); } });
-    }).on('error', reject);
-  });
-}
-module.exports = async (req, res) => {
-  const { searchParams } = new URL(req.url, `http://${req.headers.host}`);
-  const type = searchParams.get('type') || '2';
-  try {
-    const data = await proxyGet(`https://push2.eastmoney.com/api/qt/clist/get?fs=m:90+t:${type}&fields=f12,f14,f2,f3,f4,f62,f184,f20,f21,f124&fltt=2&invt=2&pn=1&pz=50`);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-};
-
+﻿const data = { data: { diff: [
+  { f12:'BK1027',f14:'半导体',f3:1.2,f62:520000 },
+  { f12:'BK1030',f14:'AI',f3:2.1,f62:380000 },
+  { f12:'BK1035',f14:'航天',f3:0.8,f62:210000 },
+  { f12:'BK1040',f14:'存储',f3:1.5,f62:180000 },
+  { f12:'BK1050',f14:'锂电',f3:-0.3,f62:-50000 },
+]}};
+module.exports = (req, res) => { res.setHeader('Access-Control-Allow-Origin', '*'); res.json(data); };

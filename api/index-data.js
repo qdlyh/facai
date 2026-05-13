@@ -1,23 +1,27 @@
 ﻿const https = require('https');
-function proxyGet(url) {
+
+function sinaGet(code) {
   return new Promise((resolve, reject) => {
-    const opts = new URL(url);
-    opts.headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://push2.eastmoney.com/' };
-    https.get(opts, (res) => {
-      let data = ''; res.on('data', c => data += c);
-      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve(data); } });
+    https.get(`https://hq.sinajs.cn/list=${code}`, { headers: { 'Referer': 'https://finance.sina.com.cn' } }, (res) => {
+      let d = ''; res.on('data', c => d += c.toString('utf-8'));
+      res.on('end', () => {
+        const m = d.match(/"(.+)"/);
+        resolve(m ? m[1].split(',') : []);
+      });
     }).on('error', reject);
   });
 }
+
 module.exports = async (req, res) => {
   try {
-    const data = {
-      sh: await proxyGet('https://push2.eastmoney.com/api/qt/stock/get?secid=1.000001&fields=f43,f44,f45,f46,f47,f48,f57,f58,f170,f169,f100,f102&invt=2&fltt=2'),
-      sz: await proxyGet('https://push2.eastmoney.com/api/qt/stock/get?secid=0.399001&fields=f43,f44,f45,f46,f47,f48,f57,f58,f170,f169,f100,f102&invt=2&fltt=2'),
-      cy: await proxyGet('https://push2.eastmoney.com/api/qt/stock/get?secid=0.399006&fields=f43,f44,f45,f46,f47,f48,f57,f58,f170,f169,f100,f102&invt=2&fltt=2')
-    };
+    const [sh, sz, cy] = await Promise.all([
+      sinaGet('sh000001'), sinaGet('sz399001'), sinaGet('sz399006')
+    ]);
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.json(data);
+    res.json({
+      sh: { name: sh[0], price: parseFloat(sh[3]), change: parseFloat(sh[2]) ? ((parseFloat(sh[3])-parseFloat(sh[2]))/parseFloat(sh[2])*100).toFixed(2) : 0, volume: parseInt(sh[8]), amount: parseFloat(sh[9]) },
+      sz: { name: sz[0], price: parseFloat(sz[3]), change: parseFloat(sz[2]) ? ((parseFloat(sz[3])-parseFloat(sz[2]))/parseFloat(sz[2])*100).toFixed(2) : 0, volume: parseInt(sz[8]), amount: parseFloat(sz[9]) },
+      cy: { name: cy[0], price: parseFloat(cy[3]), change: parseFloat(cy[2]) ? ((parseFloat(cy[3])-parseFloat(cy[2]))/parseFloat(cy[2])*100).toFixed(2) : 0, volume: parseInt(cy[8]), amount: parseFloat(cy[9]) }
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
-
