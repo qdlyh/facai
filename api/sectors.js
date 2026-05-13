@@ -1,7 +1,9 @@
-const https = require('https');
+﻿const https = require('https');
 function proxyGet(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    const opts = new URL(url);
+    opts.headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://push2.eastmoney.com/' };
+    https.get(opts, (res) => {
       let data = ''; res.on('data', c => data += c);
       res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve(data); } });
     }).on('error', reject);
@@ -16,3 +18,4 @@ module.exports = async (req, res) => {
     res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
+
