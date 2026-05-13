@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>阿狼策略 · 股票分析台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0a0b0e;
+  --bg-card: rgba(255,255,255,0.04);
+  --bg-card-hover: rgba(255,255,255,0.07);
+  --border-glass: rgba(255,255,255,0.06);
+  --border-glass-hover: rgba(0,240,255,0.3);
+  --accent-cyan: #00f0ff;
+  --accent-orange: #ff8c00;
+  --up-red: #ff4757;
+  --down-green: #2ed573;
+  --text-primary: #e8e8e8;
+  --text-secondary: rgba(255,255,255,0.5);
+  --text-dim: rgba(255,255,255,0.3);
+  --shadow-card: 0 8px 32px rgba(0,0,0,0.4);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --font-display: 'Unbounded', sans-serif;
+  --font-body: 'Geist', 'Segoe UI', sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(ellipse at 20% 50%, rgba(0,240,255,0.03) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 50%, rgba(255,140,0,0.02) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.glass-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  transition: all 0.3s ease;
+}
+.glass-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-glass-hover);
+}
+.glass-card.glow-active {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 30px rgba(0,240,255,0.1), var(--shadow-card);
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Status Bar */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.status-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+  opacity: 0.5;
+}
+.status-left { display: flex; align-items: center; gap: 24px; }
+.status-indicator {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+.status-indicator.bull { background: var(--up-red); box-shadow: 0 0 12px var(--up-red); }
+.status-indicator.bear { background: var(--down-green); box-shadow: 0 0 12px var(--down-green); }
+.status-indicator.neutral { background: var(--accent-orange); box-shadow: 0 0 12px var(--accent-orange); }
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+.status-index { font-size: 14px; }
+.status-index .price { font-size: 20px; font-weight: 600; }
+.status-index .change { font-size: 13px; margin-left: 8px; }
+.status-index .change.up { color: var(--up-red); }
+.status-index .change.down { color: var(--down-green); }
+.status-phase {
+  font-size: 12px; color: var(--text-secondary);
+  padding: 4px 12px; border-radius: 20px;
+  background: rgba(0,240,255,0.1);
+  border: 1px solid rgba(0,240,255,0.2);
+}
+.status-right { display: flex; align-items: center; gap: 16px; }
+.status-date { font-size: 13px; color: var(--text-secondary); }
+.status-pos { font-size: 13px; padding: 4px 12px; border-radius: 20px; background: rgba(255,140,0,0.15); color: var(--accent-orange); }
+
+/* Section titles */
+.section-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-glass), transparent);
+}
+
+/* Strategy Bento */
+.strategy-bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.bento-item {
+  padding: 20px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.bento-item .icon { font-size: 24px; margin-bottom: 8px; }
+.bento-item .title { font-size: 13px; font-weight: 600; color: var(--accent-cyan); margin-bottom: 4px; }
+.bento-item .desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.bento-item .detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.bento-item.expanded .detail { max-height: 200px; margin-top: 12px; }
+.bento-item .expand-hint {
+  position: absolute; bottom: 8px; right: 12px;
+  font-size: 10px; color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.bento-item:hover .expand-hint { opacity: 1; }
+
+/* Stock Grid */
+.stock-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.stock-card {
+  padding: 16px;
+  position: relative;
+  opacity: 0;
+  transform: translateY(20px);
+  animation: card-enter 0.5s ease forwards;
+}
+.stock-card:nth-child(1) { animation-delay: 0.05s; }
+.stock-card:nth-child(2) { animation-delay: 0.10s; }
+.stock-card:nth-child(3) { animation-delay: 0.15s; }
+.stock-card:nth-child(4) { animation-delay: 0.20s; }
+.stock-card:nth-child(5) { animation-delay: 0.25s; }
+.stock-card:nth-child(6) { animation-delay: 0.30s; }
+.stock-card:nth-child(7) { animation-delay: 0.35s; }
+.stock-card:nth-child(8) { animation-delay: 0.40s; }
+.stock-card:nth-child(9) { animation-delay: 0.45s; }
+.stock-card:nth-child(10) { animation-delay: 0.50s; }
+
+@keyframes card-enter {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stock-card .rank {
+  position: absolute;
+  top: -6px; left: -6px;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-size: 12px; font-weight: 700;
+  background: var(--accent-cyan);
+  color: var(--bg-primary);
+}
+.stock-card .rank.top1 {
+  width: 34px; height: 34px; font-size: 15px;
+  background: linear-gradient(135deg, var(--accent-orange), #ff6b00);
+  box-shadow: 0 0 20px rgba(255,140,0,0.4);
+}
+.stock-card .score-ring {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 40px; height: 40px;
+}
+.stock-card .score-ring svg { transform: rotate(-90deg); }
+.stock-card .score-ring .bg { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 3; }
+.stock-card .score-ring .fg {
+  fill: none; stroke: var(--accent-cyan); stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s ease;
+}
+.stock-card .score-ring .score-text {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 11px; font-weight: 600;
+  font-family: var(--font-display);
+}
+.stock-card .stock-name { font-size: 14px; font-weight: 600; margin-top: 4px; }
+.stock-card .stock-code { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; }
+.stock-card .stock-price { font-size: 18px; font-weight: 600; }
+.stock-card .stock-change { font-size: 12px; margin-left: 6px; }
+.stock-card .stock-change.up { color: var(--up-red); }
+.stock-card .stock-change.down { color: var(--down-green); }
+.stock-card .stock-sector {
+  display: inline-block;
+  font-size: 10px; padding: 2px 8px; border-radius: 10px;
+  background: rgba(0,240,255,0.1); color: var(--accent-cyan);
+  margin-top: 6px;
+}
+.stock-card .stock-bps {
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border-glass);
+  font-size: 11px; color: var(--text-secondary);
+  display: flex; justify-content: space-between;
+}
+.stock-card .stock-bps span { display: flex; flex-direction: column; }
+.stock-card .stock-bps .label { font-size: 9px; color: var(--text-dim); }
+.stock-card .stock-bps .value { font-size: 12px; }
+.stock-card.highlight {
+  border-color: var(--accent-orange);
+  background: rgba(255,140,0,0.06);
+}
+.stock-card.highlight .rank { background: linear-gradient(135deg, var(--accent-orange), #ff6b00); }
+
+/* Diagnosis */
+.diagnosis-section {
+  margin-bottom: 32px;
+}
+.diagnosis-input {
+  display: flex; gap: 12px; margin-bottom: 16px;
+}
+.diagnosis-input input {
+  flex: 1; padding: 12px 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+.diagnosis-input input:focus { border-color: var(--accent-cyan); }
+.diagnosis-input input::placeholder { color: var(--text-dim); }
+.diagnosis-input button {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, var(--accent-cyan), #0099cc);
+  border: none; border-radius: var(--radius-sm);
+  color: #000; font-weight: 600; font-size: 14px;
+  cursor: pointer; transition: all 0.3s;
+}
+.diagnosis-input button:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,240,255,0.3); }
+.diagnosis-input button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.diagnosis-result {
+  padding: 20px;
+  display: none;
+}
+.diagnosis-result.visible { display: block; animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.diag-verdict {
+  font-size: 18px; font-weight: 600; margin-bottom: 16px;
+}
+.diag-verdict.buy { color: var(--accent-cyan); }
+.diag-verdict.watch { color: var(--accent-orange); }
+.diag-verdict.avoid { color: var(--down-green); }
+.diag-verdict.reject { color: var(--text-dim); }
+.diag-verdict.nodata { color: var(--text-dim); }
+
+.diag-detail { font-size: 13px; line-height: 1.8; }
+.diag-detail .signal { display: flex; align-items: center; gap: 8px; }
+.diag-detail .signal.ok { color: var(--down-green); }
+.diag-detail .signal.warn { color: var(--accent-orange); }
+.diag-detail .signal.miss { color: var(--text-dim); }
+.diag-risk {
+  margin-top: 12px; padding: 12px; border-radius: var(--radius-sm);
+  background: rgba(255,71,87,0.1); border: 1px solid rgba(255,71,87,0.2);
+}
+.diag-risk .risk-item { font-size: 12px; color: var(--up-red); }
+.diag-suggest {
+  margin-top: 16px; padding: 16px;
+  background: rgba(0,240,255,0.05); border-radius: var(--radius-sm);
+  font-size: 13px; line-height: 1.6;
+}
+
+/* Next day strategy */
+.strategy-panel {
+  padding: 24px;
+  margin-bottom: 32px;
+  background: linear-gradient(135deg, rgba(0,240,255,0.03), rgba(255,140,0,0.03));
+}
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+.strategy-item { text-align: center; padding: 16px; border-radius: var(--radius-sm); background: rgba(255,255,255,0.03); }
+.strategy-item .label { font-size: 11px; color: var(--text-dim); }
+.strategy-item .value { font-size: 16px; font-weight: 600; margin-top: 4px; }
+.strategy-item .value.bull { color: var(--up-red); }
+.strategy-item .value.bear { color: var(--down-green); }
+.strategy-text {
+  margin-top: 16px; padding: 16px;
+  font-size: 13px; line-height: 1.8;
+  color: var(--text-secondary);
+  white-space: pre-line;
+  border-left: 2px solid var(--accent-cyan);
+  background: rgba(0,240,255,0.03);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* FAQ */
+.faq-list { margin-bottom: 32px; }
+.faq-item {
+  padding: 16px 20px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.faq-item .question {
+  font-size: 14px; font-weight: 500;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.faq-item .question .arrow { transition: transform 0.3s; font-size: 12px; color: var(--text-dim); }
+.faq-item.expanded .question .arrow { transform: rotate(90deg); }
+.faq-item .answer {
+  max-height: 0; overflow: hidden;
+  transition: max-height 0.4s ease;
+  font-size: 13px; line-height: 1.7;
+  color: var(--text-secondary);
+}
+.faq-item.expanded .answer { max-height: 300px; margin-top: 12px; }
+
+/* Quick picks bar */
+.quick-picks {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.quick-pick {
+  padding: 4px 12px; border-radius: 14px;
+  font-size: 11px; cursor: pointer;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+.quick-pick:hover { background: rgba(0,240,255,0.1); border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+/* Loading */
+.loading {
+  text-align: center; padding: 40px; color: var(--text-dim);
+}
+.loading .spinner {
+  width: 24px; height: 24px; border: 2px solid var(--border-glass);
+  border-top-color: var(--accent-cyan); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Footer */
+.footer {
+  text-align: center; padding: 20px;
+  font-size: 11px; color: var(--text-dim);
+  border-top: 1px solid var(--border-glass);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border-glass); border-radius: 3px; }
+
+/* Responsive */
+@media (max-width: 1200px) { .stock-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 992px) { .stock-grid { grid-template-columns: repeat(3, 1fr); } .strategy-bento { grid-template-columns: repeat(2, 1fr); } .strategy-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 768px) {
+  .status-bar { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .stock-grid { grid-template-columns: repeat(2, 1fr); }
+  .strategy-bento { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) { .stock-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="container" id="app">
+  <!-- Status Bar -->
+  <div class="status-bar glass-card" id="statusBar">
+    <div class="status-left">
+      <div class="status-indicator" id="moodLight"></div>
+      <div class="status-index">
+        <span id="indexName">上证</span>
+        <span class="price" id="indexPrice">--</span>
+        <span class="change" id="indexChange"></span>
+      </div>
+      <span class="status-phase" id="phaseLabel">3-3 平躺期</span>
+    </div>
+    <div class="status-right">
+      <span class="status-pos" id="posLabel">仓位: --</span>
+      <span class="status-date" id="dateLabel"></span>
+    </div>
+  </div>
+
+  <!-- Strategy Bento -->
+  <div class="section-title">交易体系</div>
+  <div class="strategy-bento" id="strategyBento"></div>
+
+  <!-- Stock Grid -->
+  <div class="section-title">每日推荐 <span style="font-family:var(--font-body);font-weight:400;font-size:11px;color:var(--text-dim)">按策略评分排序</span></div>
+  <div id="stockGrid" class="stock-grid"></div>
+
+  <!-- Diagnosis -->
+  <div class="section-title">个股诊断</div>
+  <div class="diagnosis-section glass-card" style="padding:20px">
+    <div class="quick-picks" id="quickPicks"></div>
+    <div class="diagnosis-input">
+      <input type="text" id="diagInput" placeholder="输入股票代码或名称，如 600519 或 北方华创" list="stockList">
+      <datalist id="stockList"></datalist>
+      <button id="diagBtn" onclick="diagnose()">诊断</button>
+    </div>
+    <div class="diagnosis-result glass-card" id="diagResult"></div>
+  </div>
+
+  <!-- Next Day Strategy -->
+  <div class="section-title">明日策略</div>
+  <div class="strategy-panel glass-card" id="strategyPanel">
+    <div id="strategyContent"><div class="loading"><div class="spinner"></div>加载市场数据...</div></div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="section-title">策略问答</div>
+  <div class="faq-list" id="faqList"></div>
+
+  <div class="footer">
+    阿狼策略 · 股票分析台 &mdash; 数据来源: 东方财富 | 策略来源: NGA@阿狼<br>
+    仅供参考，不构成投资建议
+  </div>
+</div>
+
+<script>
+// ====== Strategy Engine ======
+const STOCK_POOL = [
+  { code:'002371',name:'北方华创',market:0,sector:'半导体设备' },
+  { code:'688012',name:'中微公司',market:0,sector:'半导体设备' },
+  { code:'688072',name:'拓荆科技',market:0,sector:'半导体设备' },
+  { code:'688037',name:'芯源微',market:0,sector:'半导体设备' },
+  { code:'002230',name:'科大讯飞',market:0,sector:'AI软' },
+  { code:'688111',name:'金山办公',market:0,sector:'AI软' },
+  { code:'603986',name:'兆易创新',market:1,sector:'存储' },
+  { code:'300223',name:'北京君正',market:0,sector:'存储' },
+  { code:'603160',name:'汇顶科技',market:1,sector:'半导体' },
+  { code:'300750',name:'宁德时代',market:0,sector:'锂电' },
+  { code:'300014',name:'亿纬锂能',market:0,sector:'锂电' },
+  { code:'688256',name:'寒武纪',market:0,sector:'AI芯片' },
+  { code:'300308',name:'中际旭创',market:0,sector:'光模块' },
+  { code:'688041',name:'海光信息',market:0,sector:'AI芯片' },
+  { code:'600118',name:'中国卫星',market:1,sector:'航天' },
+  { code:'300455',name:'航天智装',market:0,sector:'航天' },
+  { code:'600111',name:'北方稀土',market:1,sector:'稀土' },
+  { code:'300059',name:'东方财富',market:0,sector:'金融科技' },
+  { code:'688981',name:'中芯国际',market:0,sector:'半导体制造' },
+  { code:'603501',name:'韦尔股份',market:1,sector:'半导体设计' },
+  { code:'002049',name:'紫光国微',market:0,sector:'半导体设计' },
+];
+
+const REJECT_SECTORS = ['白酒','地产','券商','军工'];
+
+const BENTO_DATA = [
+  { icon:'🌊', title:'三浪理论', desc:'3-2浪做利润 → 3-3浪平躺', detail:'阿狼的核心框架：3-2阶段通过做T和打野积累利润，3-3阶段持仓不动吃主升浪。当前判断基于指数结构、量能和期指数据。' },
+  { icon:'📡', title:'买入信号', desc:'低开+缩量+急跳水+翻绿', detail:'最佳买点：指数低开1%以上、缩量20%+、盘中急跳水后拉回平盘附近，再翻绿时就是确定性机会。可分批打进仓位。' },
+  { icon:'⚖️', title:'仓位管理', desc:'3-3平躺 / 3-2做T / 打野回补', detail:'半导体是趋势长线不动。AI/航天当打野每天当最后一天做，赚5-10个点就回半导体，拉低持仓成本。不会做T的躺平。' },
+  { icon:'🛡️', title:'风控红线', desc:'6大信号决定减仓或离场', detail:'①指数支撑破位 ②放量转缩量 ③高标板块退潮 ④期指空单猛增 ⑤30年债放量暴涨 ⑥券商砸破位。出现2条以上减仓。' },
+];
+
+const STRATEGY_QA = [
+  { q:'半导体还能拿吗？', a:'阿狼原话："半导体是我的趋势长线，打野的钱一定会回去的。" 3-3阶段平躺不动，盘中急跌是做正T的机会。不要因为回调就卖。' },
+  { q:'现在能追AI/航天吗？', a:'阿狼原话："商业航天和AI应用按每天都是最后一天来做。板块出现问题就出场，不然就拿着。" 打野可以追，但要设好止损。' },
+  { q:'什么时候减仓？', a:'看6大风控红线。指数支撑破位、放量转缩量、高标板块退潮、期指空单猛增、30年债暴涨、券商砸破位。出现2条以上考虑减。' },
+  { q:'两融3.2是什么意思？', a:'阿狼原话："两融现在下一个压力在3.2，还没到。" 两融余额达到3.2万亿时要注意风险，在此之前持仓没事。' },
+  { q:'股票跌了要不要补？', a:'阿狼原话："低开 缩量 急跳水 拉回平盘附近 盘中再次翻绿，这种就是可以打进去了。" 满足这些条件才补，不要随意补仓。' },
+  { q:'怎么看大盘方向？', a:'阿狼的方法：每天开盘看前8只涨幅股，多方占坑+1分，空方占坑+1分。结合5日/6日K线、期指多空对比、分时黄白线位置判断。' },
+  { q:'机构出货怎么办？', a:'阿狼原话："从龙虎榜和资金流向就知道机构在从高标出货，但是这个时候不重要，重要的是新入资金的饥渴程度。" 机构出高标，但新资金在进场接盘。' },
+  { q:'存储行情怎么看？', a:'阿狼原话："外资已经全球找存储溢价了，现在的存储行情和我们这些基本面已经没有半毛钱关系，看好映射就行。" 存储看美股存储映射。' },
+];
+
+// ====== State ======
+let allQuotes = {};
+let marketData = {};
+let lastDiagnosis = null;
+
+// ====== API ======
+async function fetchAPI(endpoint) {
+  try {
+    const res = await fetch(endpoint);
+    return await res.json();
+  } catch (e) {
+    console.error('API error:', endpoint, e);
+    return null;
+  }
+}
+
+async function fetchIndexData() {
+  return await fetchAPI('/api/index');
+}
+
+async function fetchQuote(code, market) {
+  return await fetchAPI(`/api/quote?code=${code}&market=${market}`);
+}
+
+async function fetchKline(code, market, klt, lmt) {
+  return await fetchAPI(`/api/kline?code=${code}&market=${market}&klt=${klt||'101'}&lmt=${lmt||'30'}`);
+}
+
+async function fetchSectors(type) {
+  return await fetchAPI(`/api/sectors?type=${type||'2'}`);
+}
+
+async function fetchMarketList(sort, pn) {
+  return await fetchAPI(`/api/market-list?sort=${sort||'f3'}&pn=${pn||'1'}`);
+}
+
+// ====== Strategy Evaluation ======
+function evaluateStock(stockData, md) {
+  if (!stockData || !stockData.data) return { score: 0, verdict: 'nodata', signals: [], risks: [] };
+  const d = stockData.data;
+  const price = d.f43;
+  const open = d.f46;
+  const changePct = d.f170;
+  const volRatio = d.f50;
+  const stock = STOCK_POOL.find(s => s.code === d.f57);
+  const sector = stock?.sector || '其他';
+
+  let score = 0;
+  const signals = [];
+  const risks = [];
+
+  if (REJECT_SECTORS.includes(sector)) {
+    return { score: 0, verdict: 'reject', signals: ['赛道不在阿狼关注范围'], risks: [`${sector}不是阿狼做的方向`], sector };
+  }
+
+  const isTech = ['半导体','AI','存储','航天','锂电','光模块','芯片','稀土','金融科技'].some(s => sector.includes(s));
+  if (isTech) { score += 15; signals.push({ type:'ok', text:`✓ 科技赛道 ${sector} +15分` }); }
+
+  if (md?.supportLevel) {
+    const idxPrice = md.shPrice || 0;
+    if (idxPrice >= md.supportLevel[0] && idxPrice <= md.supportLevel[1]) {
+      score += 15; signals.push({ type:'ok', text:`✓ 指数处于支撑位(${md.supportLevel[0]}-${md.supportLevel[1]}) +15分` });
+    }
+  }
+
+  if (open && price && open > price) {
+    const dropPct = ((open - price) / open) * 100;
+    if (dropPct >= 1) { score += 10; signals.push({ type:'ok', text:`✓ 低开 ${dropPct.toFixed(1)}% +10分` }); }
+  } else {
+    signals.push({ type:'miss', text:'— 未低开' });
+  }
+
+  if (volRatio !== undefined && volRatio > 0 && volRatio < 0.85) {
+    score += 15; signals.push({ type:'ok', text:`✓ 缩量(量比${volRatio.toFixed(2)}) +15分` });
+  } else if (volRatio !== undefined) {
+    signals.push({ type:'miss', text:`— 量比${volRatio.toFixed(2)}，未明显缩量` });
+  }
+
+  if (md?.hotSectors?.some(h => sector.includes(h))) {
+    score += 5; signals.push({ type:'ok', text:`✓ ${sector}为热点板块 +5分` });
+  }
+
+  score = Math.min(score, 100);
+  let verdict = score >= 60 ? 'buy' : score >= 35 ? 'watch' : 'avoid';
+
+  if (d.f51 && price && price >= d.f51 * 0.93) { risks.push('⚠ 接近涨停，追高风险大'); if (verdict === 'buy') verdict = 'watch'; }
+
+  const bp = computeBPS(d, stock?.market, stock?.code);
+  return { score, verdict, signals, risks, sector, bp, phase: '3-3' };
+}
+
+function computeBPS(d, market, code) {
+  if (!d || !d.f43) return { buy: '--', sell: '--', stop: '--' };
+  const p = d.f43;
+  return {
+    buy: (p * 0.97).toFixed(2),
+    sell: (p * 1.035).toFixed(2),
+    stop: (p * 0.95).toFixed(2),
+  };
+}
+
+function screenStocks(md) {
+  const results = STOCK_POOL.map(s => {
+    const q = allQuotes[s.code];
+    const ev = q ? evaluateStock(q, md) : { score: 0, verdict: 'nodata', signals: [], risks: [], bp: {buy:'--',sell:'--',stop:'--'} };
+    const price = q?.data?.f43;
+    const changePct = q?.data?.f170;
+    return { ...s, ...ev, price, changePct };
+  });
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, 10);
+}
+
+function checkRisks(md) {
+  const flags = [];
+  if (!md) return flags;
+  if (md.shPrice && md.supportLevel && md.shPrice < md.supportLevel[0]) flags.push({ level:'danger', msg:'❌ 指数支撑破位' });
+  return flags;
+}
+
+function generateStrategy(md) {
+  if (!md) return { strategy: '等待数据加载...' };
+  const support = md.supportLevel ? `${md.supportLevel[0]}-${md.supportLevel[1]}` : '4055-4060';
+  const resistance = md.resistanceLevel ? `${md.resistanceLevel[0]}-${md.resistanceLevel[1]}` : '4250-4300';
+  const volStatus = md.volExpanding ? '放量' : '缩量';
+  const marginTotal = md.marginTotal || 3.0;
+  const risks = checkRisks(md);
+  let pos = '7成（平躺不动）';
+  if (marginTotal > 3.2) pos = '减仓至5成';
+  if (risks.some(r => r.level === 'danger')) pos = '减仓至3成';
+  return {
+    date: new Date().toISOString().slice(0,10),
+    direction: volStatus === '放量' && risks.length === 0 ? '偏多' : '震荡',
+    position: pos,
+    support, resistance,
+    focusSectors: md.hotSectors?.join(' / ') || '半导体 / AI / 存储',
+    strategy: `明日关注量能是否持续，支撑位看 ${support}，压力位看 ${resistance}。两融压力在 ${marginTotal.toFixed(1)} 万亿，未到 3.2 则持仓不动。关注板块: ${md.hotSectors?.join('/') || '半导体/AI/存储'}。操作建议: ${volStatus === '放量' ? '持仓待涨，不追高，盘中急跌可加仓' : '缩量则谨慎，减仓至5成等信号'}${risks.length > 0 ? '\n⚠ 风控注意: ' + risks.map(r=>r.msg).join('; ') : ''}`
+  };
+}
+
+// ====== Render ======
+function render() {
+  renderStatusBar();
+  renderBento();
+  const top10 = screenStocks(marketData);
+  renderStockGrid(top10);
+  renderQuickPicks();
+  renderStrategy();
+  renderFAQ();
+  renderDatalist();
+}
+
+function renderStatusBar() {
+  const el = document.getElementById('statusBar');
+  const mood = document.getElementById('moodLight');
+  const idxPrice = document.getElementById('indexPrice');
+  const idxChange = document.getElementById('indexChange');
+  const phase = document.getElementById('phaseLabel');
+  const pos = document.getElementById('posLabel');
+  const date = document.getElementById('dateLabel');
+
+  date.textContent = new Date().toLocaleDateString('zh-CN');
+
+  if (marketData?.shQuote?.data) {
+    const d = marketData.shQuote.data;
+    const p = d.f43 || 0;
+    const c = d.f170 || 0;
+    idxPrice.textContent = p.toFixed(2);
+    idxChange.textContent = `${c > 0 ? '+' : ''}${c.toFixed(2)}%`;
+    idxChange.className = `change ${c >= 0 ? 'up' : 'down'}`;
+    const vol = d.f47 || 0;
+    const isExpanding = marketData.volExpanding;
+    const risks = checkRisks(marketData);
+    if (risks.some(r => r.level === 'danger')) {
+      mood.className = 'status-indicator bear';
+    } else if (c > 0 && isExpanding) {
+      mood.className = 'status-indicator bull';
+    } else {
+      mood.className = 'status-indicator neutral';
+    }
+  } else {
+    mood.className = 'status-indicator neutral';
+  }
+
+  const risks = checkRisks(marketData);
+  pos.textContent = risks.some(r=>r.level==='danger') ? '仓位: 3成' :
+    (marketData?.marginTotal > 3.2 ? '仓位: 5成' : '仓位: 7成');
+}
+
+function renderBento() {
+  const container = document.getElementById('strategyBento');
+  container.innerHTML = BENTO_DATA.map(b => `
+    <div class="bento-item glass-card" onclick="this.classList.toggle('expanded')">
+      <div class="icon">${b.icon}</div>
+      <div class="title">${b.title}</div>
+      <div class="desc">${b.desc}</div>
+      <div class="detail">${b.detail}</div>
+      <div class="expand-hint">点击展开 →</div>
+    </div>
+  `).join('');
+}
+
+function renderStockGrid(top10) {
+  const container = document.getElementById('stockGrid');
+  if (!top10 || top10.length === 0) {
+    container.innerHTML = '<div class="loading" style="grid-column:1/-1"><div class="spinner"></div>加载股票数据...</div>';
+    return;
+  }
+  container.innerHTML = top10.map((s, i) => {
+    const circ = 126;
+    const r = 20;
+    const dash = 2 * Math.PI * r;
+    const offset = dash - (s.score / 100) * dash;
+    const changeStr = s.changePct !== undefined ? `${s.changePct > 0 ? '+' : ''}${s.changePct.toFixed(2)}%` : '--';
+    const changeCls = s.changePct !== undefined ? (s.changePct >= 0 ? 'up' : 'down') : '';
+    const verCls = s.verdict === 'buy' ? 'verdict-buy' : s.verdict === 'watch' ? 'verdict-watch' : 'verdict-avoid';
+    const highlight = i === 0 ? ' highlight' : '';
+    return `
+    <div class="stock-card glass-card${highlight}" style="animation-delay:${(i*0.05).toFixed(2)}s">
+      <div class="rank${i===0?' top1':''}">${i+1}</div>
+      <svg class="score-ring" viewBox="0 0 48 48">
+        <circle class="bg" cx="24" cy="24" r="${r}"/>
+        <circle class="fg" cx="24" cy="24" r="${r}" stroke-dasharray="${dash}" stroke-dashoffset="${offset}"/>
+      </svg>
+      <div class="score-text" style="color:${s.score >= 60 ? 'var(--accent-cyan)' : s.score >= 35 ? 'var(--accent-orange)' : 'var(--text-dim)'}">${s.score}</div>
+      <div class="stock-name">${s.name}</div>
+      <div class="stock-code">${s.code}</div>
+      <div class="stock-price">${s.price ? s.price.toFixed(2) : '--'} <span class="stock-change ${changeCls}">${changeStr}</span></div>
+      <div class="stock-sector">${s.sector || '--'}</div>
+      <div class="stock-bps">
+        <span><span class="label">买点</span><span class="value">${s.bp?.buy || '--'}</span></span>
+        <span><span class="label">卖点</span><span class="value">${s.bp?.sell || '--'}</span></span>
+        <span><span class="label">止损</span><span class="value">${s.bp?.stop || '--'}</span></span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderQuickPicks() {
+  const container = document.getElementById('quickPicks');
+  const picks = STOCK_POOL.slice(0, 12);
+  container.innerHTML = picks.map(s => `<span class="quick-pick" onclick="document.getElementById('diagInput').value='${s.name}';diagnose()">${s.name}</span>`).join('');
+}
+
+function renderDatalist() {
+  const list = document.getElementById('stockList');
+  list.innerHTML = STOCK_POOL.map(s => `<option value="${s.name}">${s.code}</option>`).join('');
+}
+
+async function diagnose() {
+  const input = document.getElementById('diagInput').value.trim();
+  const result = document.getElementById('diagResult');
+  const btn = document.getElementById('diagBtn');
+  if (!input) return;
+  btn.disabled = true;
+  btn.textContent = '诊断中...';
+  result.className = 'diagnosis-result';
+  result.innerHTML = '<div class="loading"><div class="spinner"></div>分析中...</div>';
+
+  const stock = STOCK_POOL.find(s => s.name === input || s.code === input);
+  if (!stock) {
+    result.className = 'diagnosis-result visible';
+    result.innerHTML = `<div class="diag-verdict nodata">未找到该股票，请从推荐列表中选择</div>`;
+    btn.disabled = false; btn.textContent = '诊断';
+    return;
+  }
+
+  const quote = await fetchQuote(stock.code, stock.market);
+  const ev = evaluateStock(quote, marketData);
+  lastDiagnosis = { stock, ev, quote };
+
+  result.className = 'diagnosis-result visible';
+  const vCls = ev.verdict === 'buy' ? 'buy' : ev.verdict === 'watch' ? 'watch' : 'avoid';
+  const vText = ev.verdict === 'buy' ? '建议买入 ✓' : ev.verdict === 'watch' ? '观望 ⚠' : ev.verdict === 'reject' ? '不关注 ✗' : '暂无数据';
+  const price = quote?.data?.f43;
+  const change = quote?.data?.f170;
+  const changeStr = change !== undefined ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '--';
+
+  result.innerHTML = `
+    <div class="diag-verdict ${vCls}">${stock.name} (${stock.code}) — ${vText} <span style="font-size:14px;font-weight:400">${price ? price.toFixed(2) : '--'} ${changeStr}</span></div>
+    <div class="diag-detail">
+      <div style="margin-bottom:12px;font-size:12px;color:var(--text-secondary)">赛道: ${ev.sector} · 评分: ${ev.score}/100 · 策略阶段: ${ev.phase}</div>
+      ${ev.signals.map(s => `<div class="signal ${s.type || 'miss'}">${typeof s === 'string' ? s : s.text}</div>`).join('')}
+    </div>
+    ${ev.risks.length > 0 ? `<div class="diag-risk">${ev.risks.map(r => `<div class="risk-item">${r}</div>`).join('')}</div>` : ''}
+    <div class="diag-suggest">
+      <strong>阿狼策略建议:</strong><br>
+      ${ev.verdict === 'buy' ? '该股符合阿狼选股逻辑，可在盘中急跌时买入。买点参考 ' + (ev.bp?.buy || '--') + '，卖点参考 ' + (ev.bp?.sell || '--') + '，跌破 ' + (ev.bp?.stop || '--') + ' 止损。' :
+        ev.verdict === 'watch' ? '该股部分条件符合，但未到最佳买点。等待低开+缩量+急跳水后拉回平盘的组合信号出现再入场。' :
+        ev.verdict === 'reject' ? '该赛道不在阿狼关注范围内。阿狼主要做半导体/AI/航天/存储/锂电/稀土。' :
+        '当前数据不足，无法判断。请检查网络或稍后重试。'}
+    </div>
+  `;
+  btn.disabled = false; btn.textContent = '诊断';
+}
+
+function renderStrategy() {
+  const container = document.getElementById('strategyContent');
+  const s = generateStrategy(marketData);
+  if (!s.strategy) return;
+  container.innerHTML = `
+    <div class="strategy-grid">
+      <div class="strategy-item"><div class="label">日期</div><div class="value">${s.date}</div></div>
+      <div class="strategy-item"><div class="label">方向</div><div class="value ${s.direction === '偏多' ? 'bull' : 'bear'}">${s.direction}</div></div>
+      <div class="strategy-item"><div class="label">仓位建议</div><div class="value">${s.position}</div></div>
+      <div class="strategy-item"><div class="label">关注板块</div><div class="value" style="font-size:13px">${s.focusSectors}</div></div>
+    </div>
+    <div class="strategy-text">${s.strategy}</div>
+  `;
+}
+
+function renderFAQ() {
+  const container = document.getElementById('faqList');
+  container.innerHTML = STRATEGY_QA.map((q, i) => `
+    <div class="faq-item glass-card" onclick="this.classList.toggle('expanded')">
+      <div class="question">${q.q} <span class="arrow">▶</span></div>
+      <div class="answer">${q.a}</div>
+    </div>
+  `).join('');
+}
+
+// ====== Data Loading ======
+async function loadAllData() {
+  try {
+    const [indexRes] = await Promise.all([fetchIndexData()]);
+    if (indexRes) {
+      const sh = indexRes.sh?.data;
+      const sz = indexRes.sz?.data;
+      marketData.shPrice = sh?.f43 || 0;
+      marketData.supportLevel = [4055, 4060];
+      marketData.resistanceLevel = [4250, 4300];
+      marketData.volExpanding = (sh?.f47 || 0) > 5000000;
+      marketData.marginTotal = 3.0;
+      marketData.hotSectors = ['半导体','AI','存储','航天'];
+      marketData.shQuote = indexRes.sh;
+      marketData.yellowLineAbove = true;
+      marketData.gaobiaoCrash = false;
+    }
+
+    const quotePromises = STOCK_POOL.map(s => fetchQuote(s.code, s.market));
+    const quotes = await Promise.all(quotePromises);
+    quotes.forEach((q, i) => {
+      if (q?.data) allQuotes[STOCK_POOL[i].code] = q;
+    });
+
+    render();
+  } catch (e) {
+    console.error('Data load error:', e);
+    render();
+  }
+}
+
+// ====== Init ======
+document.getElementById('diagInput').addEventListener('keydown', e => { if (e.key === 'Enter') diagnose(); });
+loadAllData();
+// Auto refresh every 30s
+setInterval(loadAllData, 30000);
+</script>
+</body>
+</html>
