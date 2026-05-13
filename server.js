@@ -14,5 +14,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`阿狼策略分析台 → http://localhost:${PORT}`);
+  console.log(`恭喜发财分析台 → http://localhost:${PORT}`);
 });
