@@ -4,13 +4,12 @@ const app = express();
 const PORT = process.env.PORT || 3456;
 
 app.use(express.static(__dirname));
-app.use('/public', express.static(path.join(__dirname, 'public')));
 
 const proxyHandler = require('./api/proxy');
 app.use('/api', proxyHandler);
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, () => {
